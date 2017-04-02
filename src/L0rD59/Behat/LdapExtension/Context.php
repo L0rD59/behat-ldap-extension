@@ -35,6 +35,11 @@ class Context implements TranslatableContext, SnippetAcceptingContext
    */
   protected $authentication;
 
+  /**
+   * @var Entry $request_results
+   */
+  private $request_results;
+  
   public static function getTranslationResources()
   {
     return glob(__DIR__.'/i18n/*.xliff');
@@ -99,7 +104,7 @@ class Context implements TranslatableContext, SnippetAcceptingContext
     }
   }
 
-  /**
+   /**
    * @Then /^The "(?P<objectclass>[^"]+)" with cn "(?P<cn>[^"]+)" should exist in Ldap$/
    */
   public function theObjectclassWithCnShouldExistInLdap($objectclass, $cn)
@@ -111,9 +116,64 @@ class Context implements TranslatableContext, SnippetAcceptingContext
 
     $results = $results->toArray();
 
-    if($results[0]->getAttribute('objectclass')[0] != $objectclass)
+    if(! in_array($objectclass, $results[0]->getAttribute('objectClass'), true))
     {
-      throw new \Exception('The entry cn='.$cn.' is not a '.$objectclass.' ('.$results[0]->getAttribute('objectclass')[0].')');
+      throw new \Exception('The entry cn='.$cn.' is not a '.$objectclass.' ('.implode(',', $results[0]->getAttribute('objectClass')).')');
+    }
+  }
+  
+   /**
+   * @When /^I search Ldap for "(?P<request>[^"]+)"$/
+   */
+  public function iSearchLdapFor($request)
+  {
+    if(is_null($this->request_results = $this->client->query($this->rootDn, $request)->execute()) )
+    {
+      throw new \Exception('Ldap request "'.$request.'" has failed ');
+    }
+  }
+  
+  /**
+   * @Then /^I should get (?P<integer>\d+) entries$/
+   */
+  public function iShouldGetEntries($count)
+  {
+    if($this->request_results->count() != $count )
+    {
+      throw new \Exception('Ldap request has returned '.$this->request_results->count().'entries');
+    }
+  }
+  
+  /**
+   * @Then /^The entries should all have attribute "(?P<attribute_name>[^"]+)" with value "(?P<attribute_value>[^"]+)"$/
+   */
+  public function theEntriesShouldAllHaveAttributeWithValue($attribute_name, $attribute_value)
+  {
+  
+    foreach ($this->request_results->toArray() as $entry) {
+    
+      if(! $entry->hasAttribute($attribute_name)) {
+        throw new \Exception('Entry '.$entry->getDn().' has no attribute '.$attribute_name);
+      }
+    
+      if(! in_array($attribute_value, $entry->getAttribute($attribute_name), true))
+      {
+        throw new \Exception('Entries '.$entry->getDn().' has '.$attribute_name.' with values '.implode(',', $entry->getAttribute($attribute_name)));
+      }
+    }
+  }
+  
+  /**
+   * @Then /^The entries should all have attribute "(?P<attribute_name>[^"]+)" defined$/
+   */
+  public function theEntriesShouldAllHaveAttributeDefined($attribute_name)
+  {
+  
+    foreach ($this->request_results->toArray() as $entry) {
+    
+      if(! $entry->hasAttribute($attribute_name)) {
+        throw new \Exception('Entry '.$entry->getDn().' has no attribute '.$attribute_name);
+      }
     }
   }
 }
